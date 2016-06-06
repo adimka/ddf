@@ -1,7 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <suppressions xmlns="https://www.owasp.org/index.php/OWASP_Dependency_Check_Suppression">
 
+    <!--
+        CVE-2004-0009 is an issue with Apache not-yet-commons-ssl.
+        This jar has been stripped from the distribution, the suppression
+        is to prevent OWASP from complaining.
+    -->
+    <suppress>
+        <notes><![CDATA[
+        file name: apache-karaf-4.0.4.zip: org.apache.servicemix.bundles.not-yet-commons-ssl-0.3.11_1.jar
+        ]]></notes>
+        <sha1>224826F888A7734FF8163AA37107A8E16098D499</sha1>
+        <cve>CVE-2004-0009</cve>
+    </suppress>
 
+    <!--
+        CVE-2015-5344 is an issue with Camel version before 2.16.1
+        OWASP appears to have confused the internal proxy-camel-servlet
+        version with the overall Camel version - marking as false positive.
+    -->
+    <suppress>
+        <notes><![CDATA[
+        file name: proxy-camel-servlet-2.10.0-SNAPSHOT.jar]]></notes>
+        <cve>CVE-2015-5344</cve>
+    </suppress>
+    <!--
+        CVE-2014-1939 is an Android specific issue, and does not apply here
+    -->
+    <suppress>
+        <notes><![CDATA[
+            file name: google-http-client-1.22.0.jar]]></notes>
+        <sha1>D441FC58329C4A4C067ACEC04AC361627F66ECC8</sha1>
+        <cve>CVE-2014-1939</cve>
+    </suppress>
+    <!--
+        CVE-2008-0660 is a stack based buffer overflow vulnerability related to ActiveX and
+        several image uploaders. This is unrelated to presto-parser, so marking as a false positive.
+    -->
+    <suppress>
+        <cve>CVE-2008-0660</cve>
+    </suppress>
     <!--
         CVE-2007-1085 is a cross-site scripting (XSS) vulnerability related to Google Desktop
         which does not apply here.
@@ -38,7 +76,9 @@
 
     <suppress>
         <notes>
-            CVE-2011-5034: Applies to org.apache.servicemix.specs.activation-api-1.1-2.5.0.jar/META-INF/maven/org.apache.geronimo.specs/geronimo-activation_1.1_spec/pom.xml ServiceMix embeds some Specs provided by Geronimo but does not use any of the effected libraries.
+            CVE-2011-5034: Applies to
+            org.apache.servicemix.specs.activation-api-1.1-2.5.0.jar/META-INF/maven/org.apache.geronimo.specs/geronimo-activation_1.1_spec/pom.xml
+            ServiceMix embeds some Specs provided by Geronimo but does not use any of the effected libraries.
         </notes>
         <cve>CVE-2011-5034</cve>
     </suppress>

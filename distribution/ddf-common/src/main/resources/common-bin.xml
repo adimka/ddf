@@ -51,6 +51,11 @@
                 <exclude>RELEASE-NOTES</exclude>
                 <exclude>karaf-manual*.html</exclude>
                 <exclude>karaf-manual*.pdf</exclude>
+                <!--
+                Excluding this unused jar, as we don't use it (TO BE CONFIRMED)
+                and it's associated with CVE-2004-0009
+                -->
+                <exclude>**/bundles/org.apache.servicemix.bundles.not-yet-commons-ssl/**</exclude>
             </excludes>
         </fileSet>
 
