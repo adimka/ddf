@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLPeerUnverifiedException;
 
 import org.apache.http.HttpResponse;
@@ -28,7 +27,6 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.ssl.SSLContexts;
 import org.codice.ddf.admin.api.config.sources.OpenSearchSourceConfiguration;
@@ -45,6 +43,31 @@ public class OpenSearchSourceUtils {
             "https://%s:%d/catalog/query",
             "http://%s:%d/services/catalog/query",
             "http://%s:%d/catalog/query");
+
+    private static HttpClient noTrustClient = HttpClientBuilder.create()
+            .setDefaultRequestConfig(RequestConfig.custom()
+                    .setConnectTimeout(PING_TIMEOUT)
+                    .build())
+            .build();
+
+    private static HttpClient trustClient;
+    static {
+        try {
+            trustClient = HttpClientBuilder.create()
+                    .setDefaultRequestConfig(RequestConfig.custom()
+                            .setConnectTimeout(PING_TIMEOUT)
+                            .build())
+                    .setSSLSocketFactory(new SSLConnectionSocketFactory(
+                            SSLContexts.custom()
+                                    .loadTrustMaterial(null, (chain, authType) -> true)
+                                    .build()
+                    ))
+                    .build();
+        } catch (Exception e) {
+            trustClient = HttpClientBuilder.create().build();
+        }
+    }
+
 
     //Given a config, returns the correct URL format for the endpoint if one exists
     public static UrlAvailability confirmEndpointUrl(OpenSearchSourceConfiguration config) {
@@ -63,18 +86,11 @@ public class OpenSearchSourceUtils {
         UrlAvailability result = new UrlAvailability(url);
         int status;
         String contentType;
-        HttpClient client = HttpClientBuilder.create()
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setConnectTimeout(PING_TIMEOUT)
-                        .build())
-                .build();
         HttpGet request = new HttpGet(url);
         try {
-            HttpResponse response = client.execute(request);
-            status = response.getStatusLine()
-                    .getStatusCode();
-            contentType = ContentType.getOrDefault(response.getEntity())
-                    .getMimeType();
+            HttpResponse response = noTrustClient.execute(request);
+            status = response.getStatusLine() .getStatusCode();
+            contentType = response.getEntity().getContentType().getValue();
             if (status == HTTP_OK && OPENSEARCH_MIME_TYPES.contains(contentType)) {
                 return result.trustedCertAuthority(true).certError(false).available(true);
             } else {
@@ -86,21 +102,9 @@ public class OpenSearchSourceUtils {
             return result.trustedCertAuthority(false).certError(true).available(false);
         } catch (IOException e) {
             try {
-                SSLContext sslContext = SSLContexts.custom()
-                        .loadTrustMaterial(null, (chain, authType) -> true)
-                        .build();
-                SSLConnectionSocketFactory sf = new SSLConnectionSocketFactory(sslContext);
-                client = HttpClientBuilder.create()
-                        .setDefaultRequestConfig(RequestConfig.custom()
-                                .setConnectTimeout(PING_TIMEOUT)
-                                .build())
-                        .setSSLSocketFactory(sf)
-                        .build();
-                HttpResponse response = client.execute(request);
-                status = response.getStatusLine()
-                        .getStatusCode();
-                contentType = ContentType.getOrDefault(response.getEntity())
-                        .getMimeType();
+                HttpResponse response = trustClient.execute(request);
+                status = response.getStatusLine().getStatusCode();
+                contentType = response.getEntity().getContentType().getValue();
                 if (status == HTTP_OK && OPENSEARCH_MIME_TYPES.contains(contentType)) {
                     return result.trustedCertAuthority(false).certError(false).available(true);
                 }
@@ -109,5 +113,13 @@ public class OpenSearchSourceUtils {
             }
         }
         return result;
+    }
+
+    protected static void setNoTrustClient(HttpClient client) {
+        noTrustClient = client;
+    }
+
+    protected static void setTrustClient(HttpClient client) {
+        trustClient = client;
     }
 }

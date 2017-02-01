@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -37,7 +36,6 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.ssl.SSLContexts;
 import org.codice.ddf.admin.api.config.sources.CswSourceConfiguration;
@@ -59,6 +57,30 @@ public class CswSourceUtils {
     private static final List<String> CSW_MIME_TYPES = ImmutableList.of("text/xml",
             "application/xml");
 
+    private static HttpClient noTrustClient = HttpClientBuilder.create()
+            .setDefaultRequestConfig(RequestConfig.custom()
+                    .setConnectTimeout(PING_TIMEOUT)
+                    .build())
+            .build();
+
+    private static HttpClient trustClient;
+    static {
+        try {
+            trustClient = HttpClientBuilder.create()
+                    .setDefaultRequestConfig(RequestConfig.custom()
+                            .setConnectTimeout(PING_TIMEOUT)
+                            .build())
+                    .setSSLSocketFactory(new SSLConnectionSocketFactory(
+                            SSLContexts.custom()
+                                    .loadTrustMaterial(null, (chain, authType) -> true)
+                                    .build()
+                    ))
+                    .build();
+        } catch (Exception e) {
+            trustClient = HttpClientBuilder.create().build();
+        }
+    }
+
     private static final String GMD_OUTPUT_SCHEMA = "http://www.isotc211.org/2005/gmd";
 
     private static final String HAS_CATALOG_METACARD_EXP =
@@ -75,19 +97,12 @@ public class CswSourceUtils {
         UrlAvailability result = new UrlAvailability(url);
         String contentType;
         int status;
-        HttpClient client = HttpClientBuilder.create()
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setConnectTimeout(PING_TIMEOUT)
-                        .build())
-                .build();
         url += GET_CAPABILITIES_PARAMS;
         HttpGet request = new HttpGet(url);
         try {
-            HttpResponse response = client.execute(request);
-            status = response.getStatusLine()
-                    .getStatusCode();
-            contentType = ContentType.getOrDefault(response.getEntity())
-                    .getMimeType();
+            HttpResponse response = noTrustClient.execute(request);
+            status = response.getStatusLine().getStatusCode();
+            contentType = response.getEntity().getContentType().getValue();
             if (status == HTTP_OK && CSW_MIME_TYPES.contains(contentType)) {
                 return result.trustedCertAuthority(true).certError(false).available(true);
             } else {
@@ -100,21 +115,9 @@ public class CswSourceUtils {
         } catch (IOException e) {
             try {
                 // We want to trust any root CA, but maintain all other standard SSL checks
-                SSLContext sslContext = SSLContexts.custom()
-                        .loadTrustMaterial(null, (chain, authType) -> true)
-                        .build();
-                SSLConnectionSocketFactory sf = new SSLConnectionSocketFactory(sslContext);
-                client = HttpClientBuilder.create()
-                        .setDefaultRequestConfig(RequestConfig.custom()
-                                .setConnectTimeout(PING_TIMEOUT)
-                                .build())
-                        .setSSLSocketFactory(sf)
-                        .build();
-                HttpResponse response = client.execute(request);
-                status = response.getStatusLine()
-                        .getStatusCode();
-                contentType = ContentType.getOrDefault(response.getEntity())
-                        .getMimeType();
+                HttpResponse response = trustClient.execute(request);
+                status = response.getStatusLine().getStatusCode();
+                contentType = response.getEntity().getContentType().getValue();
                 if (status == HTTP_OK && CSW_MIME_TYPES.contains(contentType)) {
                     return result.trustedCertAuthority(false).certError(false).available(true);
                 }
@@ -129,18 +132,15 @@ public class CswSourceUtils {
     // a config with the appropriate factoryPid and Output Schema.
     public static Optional<CswSourceConfiguration> getPreferredConfig(CswSourceConfiguration config) {
         CswSourceConfiguration preferred = new CswSourceConfiguration(config);
-        HttpClient client = HttpClientBuilder.create()
-                .build();
         HttpGet getCapabilitiesRequest = new HttpGet(
                 preferred.endpointUrl() + GET_CAPABILITIES_PARAMS);
-        XPath xpath = XPathFactory.newInstance()
-                .newXPath();
+        XPath xpath = XPathFactory.newInstance().newXPath();
         xpath.setNamespaceContext(OWS_NAMESPACE_CONTEXT);
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
-            Document capabilitiesXml = builder.parse(client.execute(getCapabilitiesRequest)
+            Document capabilitiesXml = builder.parse(trustClient.execute(getCapabilitiesRequest)
                     .getEntity()
                     .getContent());
             if ((Boolean) xpath.compile(HAS_CATALOG_METACARD_EXP)
@@ -172,4 +172,11 @@ public class CswSourceUtils {
         return result.isPresent() ? result.get() : null;
     }
 
+    public static void setNoTrustClient(HttpClient client) {
+        noTrustClient = client;
+    }
+
+    public static void setTrustClient(HttpClient client) {
+        trustClient = client;
+    }
 }

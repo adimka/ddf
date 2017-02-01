@@ -79,14 +79,26 @@ public class SourceHandlerCommons {
     public static final NamespaceContext OWS_NAMESPACE_CONTEXT = new NamespaceContext() {
         @Override
         public String getNamespaceURI(String prefix) {
-            return prefix.equals("ows") ? "http://www.opengis.net/ows" : null;
+            switch (prefix) {
+            case "ows":
+                return "http://www.opengis.net/ows";
+            case "wfs":
+                return "http://www.opengis.net/wfs/2.0";
+            default:
+                return null;
+            }
         }
-
         @Override
         public String getPrefix(String namespaceURI) {
-            return null;
+            switch (namespaceURI) {
+            case "http://www.opengis.net/ows":
+                return "ows";
+            case "http://www.opengis.net/wfs/2.0":
+                return "wfs";
+            default:
+                return null;
+            }
         }
-
         @Override
         public Iterator getPrefixes(String namespaceURI) {
             return null;
