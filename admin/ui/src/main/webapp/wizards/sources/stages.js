@@ -2,7 +2,7 @@ import React from 'react'
 import { connect } from 'react-redux'
 
 import { getSourceSelections, getConfigurationHandlerId, getSourceName, getConfigTypes } from './reducer'
-import { getMessages, getAllConfig, getConfig } from '../../reducer'
+import { getAllConfig, getConfig } from '../../reducer'
 import { changeStage, testSources, persistConfig, resetSourceWizardState, fetchConfigTypes, testManualUrl } from './actions'
 
 import Title from 'components/Title'
@@ -63,7 +63,7 @@ const discoveryStageDefaults = {
   sourceHostName: '',
   sourcePort: 8993
 }
-const DiscoveryStageView = ({ testSources, setDefaults, messages, configs }) => (
+const DiscoveryStageView = ({ messages, testSources, setDefaults, configs }) => (
   <Mount on={() => setDefaults(discoveryStageDefaults)}>
     <NavPanes backClickTarget='welcomeStage' forwardClickTarget='sourceSelectionStage'>
       <Title>
@@ -75,19 +75,19 @@ const DiscoveryStageView = ({ testSources, setDefaults, messages, configs }) => 
       <ConstrainedHostnameInput
         id='sourceHostName'
         label='Hostname'
-        errorText={(configs.sourceHostName) === null ? 'Cannot be blank' : null} />
+        errorText={(configs.sourceHostName) === null ? 'Cannot be blank.' : undefined} />
       <ConstrainedPortInput
         id='sourcePort'
         label='Port'
-        errorText={(configs.sourcePort < 0) ? 'Invalid port number' : null} />
+        errorText={(configs.sourcePort < 0) ? 'Port is not in valid range.' : undefined} />
       <ConstrainedInput
         id='sourceUserName'
         label='Username (optional)'
-        errorText={(isEmpty(configs.sourceUserName) && !isEmpty(configs.sourceUserPassword)) ? 'Password with no username' : null} />
+        errorText={(isEmpty(configs.sourceUserName) && !isEmpty(configs.sourceUserPassword)) ? 'Password with no username.' : undefined} />
       <ConstrainedPasswordInput
         id='sourceUserPassword'
         label='Password (optional)'
-        errorText={(!isEmpty(configs.sourceUserName) && isEmpty(configs.sourceUserPassword)) ? 'Username with no password' : null} />
+        errorText={(!isEmpty(configs.sourceUserName) && isEmpty(configs.sourceUserPassword)) ? 'Username with no password.' : undefined} />
       {messages.map((msg, i) => <Message key={i} {...msg} />)}
 
       <ActionGroup>
@@ -97,13 +97,12 @@ const DiscoveryStageView = ({ testSources, setDefaults, messages, configs }) => 
           disabled={isEmpty(configs.sourceHostName) ||
             configs.sourcePort < 0 ||
             isEmpty(configs.sourceUserName) !== isEmpty(configs.sourceUserPassword)}
-          onClick={() => testSources('/admin/beta/config/probe/sources/discover-sources', 'sources', 'sourceSelectionStage', 'source')} />
+          onClick={() => testSources('sources', 'sourceSelectionStage')} />
       </ActionGroup>
     </NavPanes>
   </Mount>
 )
 export const DiscoveryStage = connect((state) => ({
-  messages: getMessages(state, 'source'),
   configs: getAllConfig(state)
 }), {
   testSources,
@@ -111,7 +110,7 @@ export const DiscoveryStage = connect((state) => ({
 })(DiscoveryStageView)
 
 // Source Selection Stage
-const SourceSelectionStageView = ({sourceSelections = [], selectedSourceConfigHandlerId, changeStage, fetchConfigTypes}) => {
+const SourceSelectionStageView = ({ messages, sourceSelections = [], selectedSourceConfigHandlerId, changeStage, fetchConfigTypes }) => {
   if (sourceSelections.length !== 0) {
     return (
       <NavPanes backClickTarget='discoveryStage' forwardClickTarget='confirmationStage'>
@@ -122,6 +121,7 @@ const SourceSelectionStageView = ({sourceSelections = [], selectedSourceConfigHa
           Choose which sources to add.
         </Description>
         <SourceRadioButtons options={sourceSelections} />
+        {messages.map((msg, i) => <Message key={i} {...msg} />)}
         <ActionGroup>
           <Action primary label='Next' disabled={selectedSourceConfigHandlerId === undefined} onClick={() => changeStage('confirmationStage')} />
         </ActionGroup>
@@ -136,6 +136,7 @@ const SourceSelectionStageView = ({sourceSelections = [], selectedSourceConfigHa
         <Description>
           Click below to enter source information manually, or go back to enter a different hostname/port.
         </Description>
+        {messages.map((msg, i) => <Message key={i} {...msg} />)}
         <ActionGroup>
           <Action primary label='Enter Information Manually' onClick={fetchConfigTypes} />
         </ActionGroup>
@@ -152,7 +153,7 @@ export const SourceSelectionStage = connect((state) => ({
 })(SourceSelectionStageView)
 
 // Confirmation Stage
-const ConfirmationStageView = ({ selectedSource, persistConfig, sourceName, configType }) => (
+const ConfirmationStageView = ({ messages, selectedSource, persistConfig, sourceName, configType }) => (
   <NavPanes backClickTarget='sourceSelectionStage' forwardClickTarget='completedStage'>
     <Title>
       Finalize Source Configuration
@@ -164,6 +165,7 @@ const ConfirmationStageView = ({ selectedSource, persistConfig, sourceName, conf
     <ConstrainedInfo label='Source Address' value={selectedSource.endpointUrl} />
     <ConstrainedInfo label='Username' value={selectedSource.sourceUserName || 'none'} />
     <ConstrainedInfo label='Password' value={selectedSource.sourceUserPassword ? '*****' : 'none'} />
+    {messages.map((msg, i) => <Message key={i} {...msg} />)}
     <ActionGroup>
       <Action
         primary
@@ -188,7 +190,7 @@ const isEmpty = (string) => {
 }
 
 // Completed Stage
-const CompletedStageView = ({ resetSourceWizardState }) => (
+const CompletedStageView = ({ messages, resetSourceWizardState }) => (
   <Flexbox className={stageStyle} justifyContent='center' flexDirection='row'>
     <CenteredElements>
       <Title>
@@ -210,7 +212,7 @@ const CompletedStageView = ({ resetSourceWizardState }) => (
 export const CompletedStage = connect(null, { resetSourceWizardState })(CompletedStageView)
 
 // Manual Entry Page
-const ManualEntryStageView = ({ configOptions, endpointUrl, configType, testManualUrl }) => (
+const ManualEntryStageView = ({ messages, configOptions, endpointUrl, configType, testManualUrl }) => (
   <NavPanes backClickTarget='sourceSelectionStage' forwardClickTarget='confirmationStage'>
     <Title>
       Manual Source Entry
@@ -220,6 +222,7 @@ const ManualEntryStageView = ({ configOptions, endpointUrl, configType, testManu
     </Description>
     <ConstrainedSelectInput id='manualEntryConfigTypeInput' label='Source Configuration Type' options={configOptions} />
     <ConstrainedInput id='endpointUrl' label='Source URL' />
+    {messages.map((msg, i) => <Message key={i} {...msg} />)}
     <ActionGroup>
       <Action
         primary

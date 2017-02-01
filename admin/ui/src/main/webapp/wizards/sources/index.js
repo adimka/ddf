@@ -1,6 +1,7 @@
 import React from 'react'
 import { connect } from 'react-redux'
 import { getSourceStage, getIsSubmitting } from './reducer'
+import { getMessages } from '../../reducer'
 
 import Flexbox from 'flexbox-react'
 import CircularProgress from 'material-ui/CircularProgress'
@@ -35,20 +36,23 @@ const Wizard = connect(null, { clearWizard })(WizardView)
   - manualEntryStage
 */
 
-let StageRouter = ({ stage }) => {
+let StageRouter = ({ stage, messages }) => {
   const stageMapping = {
-    welcomeStage: <WelcomeStage />,
-    discoveryStage: <DiscoveryStage />,
-    sourceSelectionStage: <SourceSelectionStage />,
-    confirmationStage: <ConfirmationStage />,
-    completedStage: <CompletedStage />,
-    manualEntryStage: <ManualEntryStage />
+    welcomeStage: <WelcomeStage messages={messages} />,
+    discoveryStage: <DiscoveryStage messages={messages} />,
+    sourceSelectionStage: <SourceSelectionStage messages={messages} />,
+    confirmationStage: <ConfirmationStage messages={messages} />,
+    completedStage: <CompletedStage messages={messages} />,
+    manualEntryStage: <ManualEntryStage messages={messages} />
   }
   return (stageMapping[stage])
 }
-StageRouter = connect((state) => ({ stage: getSourceStage(state) }))(StageRouter)
+StageRouter = connect((state) => ({
+  stage: getSourceStage(state),
+  messages: getMessages(state, 'sources')
+}))(StageRouter)
 
-let SourceApp = ({ isSubmitting = false, value = {}, setDefaults }) => (
+let SourceApp = ({ isSubmitting = false, value = {}, setDefaults, messages }) => (
   <Wizard id='sources'>
     <Paper className={styles.main}>
       {isSubmitting
@@ -62,6 +66,8 @@ let SourceApp = ({ isSubmitting = false, value = {}, setDefaults }) => (
     </Paper>
   </Wizard>
 )
-SourceApp = connect((state) => ({ isSubmitting: getIsSubmitting(state) }))(SourceApp)
+SourceApp = connect((state) => ({
+  isSubmitting: getIsSubmitting(state)
+}))(SourceApp)
 
 export default SourceApp
