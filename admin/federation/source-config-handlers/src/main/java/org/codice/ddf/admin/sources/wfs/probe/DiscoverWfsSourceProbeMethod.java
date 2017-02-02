@@ -65,6 +65,8 @@ public class DiscoverWfsSourceProbeMethod extends ProbeMethod<WfsSourceConfigura
 
     public static final List<String> RETURN_TYPES = ImmutableList.of(DISCOVERED_SOURCES);
 
+    private WfsSourceUtils utils;
+
     public DiscoverWfsSourceProbeMethod() {
         super(WFS_DISCOVER_SOURCES_ID,
                 DESCRIPTION,
@@ -74,6 +76,7 @@ public class DiscoverWfsSourceProbeMethod extends ProbeMethod<WfsSourceConfigura
                 FAILURE_TYPES,
                 null,
                 RETURN_TYPES);
+        utils = new WfsSourceUtils();
     }
 
     @Override
@@ -84,7 +87,7 @@ public class DiscoverWfsSourceProbeMethod extends ProbeMethod<WfsSourceConfigura
             return probeReport;
         }
 
-        UrlAvailability availability = WfsSourceUtils.getUrlAvailability(configuration.endpointUrl());
+        UrlAvailability availability = utils.getUrlAvailability(configuration.endpointUrl());
 
         if(availability == null) {
             return probeReport.addMessage(buildMessage(SUCCESS_TYPES, FAILURE_TYPES, WARNING_TYPES, UNKNOWN_ENDPOINT));
@@ -95,7 +98,7 @@ public class DiscoverWfsSourceProbeMethod extends ProbeMethod<WfsSourceConfigura
             return probeReport;
         }
 
-        Optional<WfsSourceConfiguration> createdConfig = WfsSourceUtils.getPreferredConfig(config);
+        Optional<WfsSourceConfiguration> createdConfig = utils.getPreferredConfig(config);
         if (!createdConfig.isPresent()) {
             return probeReport.addMessage(buildMessage(SUCCESS_TYPES, FAILURE_TYPES, WARNING_TYPES, INTERNAL_ERROR));
         }

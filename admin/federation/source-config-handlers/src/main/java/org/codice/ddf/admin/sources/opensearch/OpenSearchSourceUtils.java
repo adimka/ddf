@@ -15,22 +15,31 @@ package org.codice.ddf.admin.sources.opensearch;
 
 import static java.net.HttpURLConnection.HTTP_OK;
 import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.PING_TIMEOUT;
+import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.SOURCES_NAMESPACE_CONTEXT;
 
-import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Optional;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
 
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.ssl.SSLContexts;
 import org.codice.ddf.admin.api.config.sources.OpenSearchSourceConfiguration;
 import org.codice.ddf.admin.api.handler.commons.UrlAvailability;
+import org.w3c.dom.Document;
 
 import com.google.common.collect.ImmutableList;
 
@@ -44,54 +53,43 @@ public class OpenSearchSourceUtils {
             "http://%s:%d/services/catalog/query",
             "http://%s:%d/catalog/query");
 
-    private static HttpClient noTrustClient = HttpClientBuilder.create()
-            .setDefaultRequestConfig(RequestConfig.custom()
-                    .setConnectTimeout(PING_TIMEOUT)
-                    .build())
-            .build();
+    private static final String SIMPLE_QUERY_PARAMS = "?q=test&mr=1";
 
-    private static HttpClient trustClient;
-    static {
-        try {
-            trustClient = HttpClientBuilder.create()
-                    .setDefaultRequestConfig(RequestConfig.custom()
-                            .setConnectTimeout(PING_TIMEOUT)
-                            .build())
-                    .setSSLSocketFactory(new SSLConnectionSocketFactory(
-                            SSLContexts.custom()
-                                    .loadTrustMaterial(null, (chain, authType) -> true)
-                                    .build()
-                    ))
-                    .build();
-        } catch (Exception e) {
-            trustClient = HttpClientBuilder.create().build();
-        }
-    }
-
+    private static final String TOTAL_RESULTS_XPATH = "//os:totalResults|//opensearch:totalResults";
 
     //Given a config, returns the correct URL format for the endpoint if one exists
-    public static UrlAvailability confirmEndpointUrl(OpenSearchSourceConfiguration config) {
+    public UrlAvailability confirmEndpointUrl(OpenSearchSourceConfiguration config) {
         Optional<UrlAvailability> result = URL_FORMATS.stream()
                 .map(formatUrl -> String.format(formatUrl,
                         config.sourceHostName(),
                         config.sourcePort()))
-                .map(OpenSearchSourceUtils::getUrlAvailability)
+                .map(this::getUrlAvailability)
                 .filter(avail -> avail.isAvailable() || avail.isCertError())
                 .findFirst();
         return result.isPresent() ? result.get() : null;
     }
 
     // Given a configuration with and endpointUrl, determines if that URL is available as an OS source
-    public static UrlAvailability getUrlAvailability(String url) {
+    public UrlAvailability getUrlAvailability(String url) {
         UrlAvailability result = new UrlAvailability(url);
+        boolean queryResponse;
         int status;
         String contentType;
-        HttpGet request = new HttpGet(url);
+        HttpGet request = new HttpGet(url + SIMPLE_QUERY_PARAMS);
+        XPath xpath = XPathFactory.newInstance().newXPath();
+        xpath.setNamespaceContext(SOURCES_NAMESPACE_CONTEXT);
         try {
-            HttpResponse response = noTrustClient.execute(request);
-            status = response.getStatusLine() .getStatusCode();
+            HttpResponse response = getCloseableHttpClient(false).execute(request);
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document responseXml = builder.parse(response
+                    .getEntity()
+                    .getContent());
+            queryResponse = (Boolean) xpath.compile(TOTAL_RESULTS_XPATH).evaluate(responseXml, XPathConstants.BOOLEAN);
+            status = response.getStatusLine().getStatusCode();
             contentType = response.getEntity().getContentType().getValue();
-            if (status == HTTP_OK && OPENSEARCH_MIME_TYPES.contains(contentType)) {
+            if (status == HTTP_OK && OPENSEARCH_MIME_TYPES.contains(contentType) && queryResponse) {
                 return result.trustedCertAuthority(true).certError(false).available(true);
             } else {
                 return result.trustedCertAuthority(true).certError(false).available(false);
@@ -100,26 +98,44 @@ public class OpenSearchSourceUtils {
             // This is the hostname != cert name case - if this occurs, the URL's SSL cert configuration
             // is incorrect, or a serious network security issue has occurred.
             return result.trustedCertAuthority(false).certError(true).available(false);
-        } catch (IOException e) {
+        } catch (Exception e) {
             try {
-                HttpResponse response = trustClient.execute(request);
-                status = response.getStatusLine().getStatusCode();
-                contentType = response.getEntity().getContentType().getValue();
-                if (status == HTTP_OK && OPENSEARCH_MIME_TYPES.contains(contentType)) {
-                    return result.trustedCertAuthority(false).certError(false).available(true);
+                HttpResponse response = getCloseableHttpClient(true).execute(request);
+                status = response.getStatusLine()
+                        .getStatusCode();
+                contentType = response.getEntity()
+                        .getContentType()
+                        .getValue();
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(true);
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document responseXml = builder.parse(response
+                        .getEntity()
+                        .getContent());
+                queryResponse = (Boolean) xpath.compile(TOTAL_RESULTS_XPATH).evaluate(responseXml, XPathConstants.BOOLEAN);
+                if (status == HTTP_OK && OPENSEARCH_MIME_TYPES.contains(contentType) && queryResponse) {
+                    return result.trustedCertAuthority(false)
+                            .certError(false)
+                            .available(true);
                 }
             } catch (Exception e1) {
-                return result.trustedCertAuthority(false).certError(false).available(false);
+                return result.trustedCertAuthority(false)
+                        .certError(false)
+                        .available(false);
             }
         }
         return result;
     }
 
-    protected static void setNoTrustClient(HttpClient client) {
-        noTrustClient = client;
-    }
-
-    protected static void setTrustClient(HttpClient client) {
-        trustClient = client;
+    CloseableHttpClient getCloseableHttpClient(boolean trustAnyCA)
+            throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException {
+        HttpClientBuilder builder = HttpClientBuilder.create().setDefaultRequestConfig(
+                RequestConfig.custom().setConnectTimeout(PING_TIMEOUT).build());
+        if (trustAnyCA) {
+            builder.setSSLSocketFactory(new SSLConnectionSocketFactory(SSLContexts.custom()
+                    .loadTrustMaterial(null, (chain, authType) -> true)
+                    .build()));
+        }
+        return builder.build();
     }
 }

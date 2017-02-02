@@ -76,7 +76,7 @@ public class SourceHandlerCommons {
     /*********************************************************
      * NamespaceContext for Xpath queries
      *********************************************************/
-    public static final NamespaceContext OWS_NAMESPACE_CONTEXT = new NamespaceContext() {
+    public static final NamespaceContext SOURCES_NAMESPACE_CONTEXT = new NamespaceContext() {
         @Override
         public String getNamespaceURI(String prefix) {
             switch (prefix) {
@@ -84,6 +84,9 @@ public class SourceHandlerCommons {
                 return "http://www.opengis.net/ows";
             case "wfs":
                 return "http://www.opengis.net/wfs/2.0";
+            case "os":
+            case "opensearch":
+                return "http://a9.com/-/spec/opensearch/1.1/";
             default:
                 return null;
             }
@@ -95,6 +98,8 @@ public class SourceHandlerCommons {
                 return "ows";
             case "http://www.opengis.net/wfs/2.0":
                 return "wfs";
+            case "http://a9.com/-/spec/opensearch/1.1/":
+                return "os";
             default:
                 return null;
             }

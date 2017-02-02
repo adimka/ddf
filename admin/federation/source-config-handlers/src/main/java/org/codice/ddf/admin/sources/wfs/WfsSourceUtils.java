@@ -14,12 +14,14 @@
 package org.codice.ddf.admin.sources.wfs;
 
 import static java.net.HttpURLConnection.HTTP_OK;
-import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.OWS_NAMESPACE_CONTEXT;
 import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.PING_TIMEOUT;
+import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.SOURCES_NAMESPACE_CONTEXT;
 import static org.codice.ddf.admin.api.services.WfsServiceProperties.WFS1_FACTORY_PID;
 import static org.codice.ddf.admin.api.services.WfsServiceProperties.WFS2_FACTORY_PID;
 
-import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,10 +32,10 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathFactory;
 
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.ssl.SSLContexts;
 import org.codice.ddf.admin.api.config.sources.WfsSourceConfiguration;
@@ -56,98 +58,89 @@ public class WfsSourceUtils {
             "http://%s:%d/services/wfs",
             "http://%s:%d/wfs");
 
-    private static HttpClient noTrustClient = HttpClientBuilder.create()
-            .setDefaultRequestConfig(RequestConfig.custom()
-                    .setConnectTimeout(PING_TIMEOUT)
-                    .build())
-            .build();
-
-    private static HttpClient trustClient;
-    static {
-        try {
-            trustClient = HttpClientBuilder.create()
-                    .setDefaultRequestConfig(RequestConfig.custom()
-                            .setConnectTimeout(PING_TIMEOUT)
-                            .build())
-                    .setSSLSocketFactory(new SSLConnectionSocketFactory(
-                            SSLContexts.custom()
-                                    .loadTrustMaterial(null, (chain, authType) -> true)
-                                    .build()
-                    ))
-                    .build();
-        } catch (Exception e) {
-            trustClient = HttpClientBuilder.create().build();
-        }
-    }
-
-    public static Optional<UrlAvailability> confirmEndpointUrl(WfsSourceConfiguration config) {
+    public Optional<UrlAvailability> confirmEndpointUrl(WfsSourceConfiguration config) {
         return URL_FORMATS.stream()
                 .map(formatUrl -> String.format(formatUrl,
                         config.sourceHostName(),
                         config.sourcePort()))
-                .map(WfsSourceUtils::getUrlAvailability)
+                .map(this::getUrlAvailability)
                 .filter(avail -> avail.isAvailable() || avail.isCertError())
                 .findFirst();
     }
 
-    public static UrlAvailability getUrlAvailability(String url) {
+    public UrlAvailability getUrlAvailability(String url) {
         UrlAvailability result = new UrlAvailability(url);
         int status;
         String contentType;
         url += GET_CAPABILITIES_PARAMS;
         HttpGet request = new HttpGet(url);
         try {
-            HttpResponse response = noTrustClient.execute(request);
-            status = response.getStatusLine() .getStatusCode();
-            contentType = response.getEntity().getContentType().getValue();
+            HttpResponse response = getCloseableHttpClient(false).execute(request);
+            status = response.getStatusLine()
+                    .getStatusCode();
+            contentType = response.getEntity()
+                    .getContentType()
+                    .getValue();
             if (status == HTTP_OK && WFS_MIME_TYPES.contains(contentType)) {
-                return result.trustedCertAuthority(true).certError(false).available(true);
+                return result.trustedCertAuthority(true)
+                        .certError(false)
+                        .available(true);
             } else {
-                return result.trustedCertAuthority(true).certError(false).available(false);
+                return result.trustedCertAuthority(true)
+                        .certError(false)
+                        .available(false);
             }
         } catch (SSLPeerUnverifiedException e) {
             // This is the hostname != cert name case - if this occurs, the URL's SSL cert configuration
             // is incorrect, or a serious network security issue has occurred.
-            return result.trustedCertAuthority(false).certError(true).available(false);
-        } catch (IOException e) {
+            return result.trustedCertAuthority(false)
+                    .certError(true)
+                    .available(false);
+        } catch (Exception e) {
             try {
-                HttpResponse response = trustClient.execute(request);
-                status = response.getStatusLine() .getStatusCode();
-                contentType = response.getEntity().getContentType().getValue();
+                HttpResponse response = getCloseableHttpClient(true).execute(request);
+                status = response.getStatusLine()
+                        .getStatusCode();
+                contentType = response.getEntity()
+                        .getContentType()
+                        .getValue();
                 if (status == HTTP_OK && WFS_MIME_TYPES.contains(contentType)) {
-                    return result.trustedCertAuthority(false).certError(false).available(true);
+                    return result.trustedCertAuthority(false)
+                            .certError(false)
+                            .available(true);
                 }
             } catch (Exception e1) {
-                return result.trustedCertAuthority(false).certError(false).available(false);
+                return result.trustedCertAuthority(false)
+                        .certError(false)
+                        .available(false);
             }
         }
         return result;
     }
 
-    public static Optional<WfsSourceConfiguration> getPreferredConfig(
+    public Optional<WfsSourceConfiguration> getPreferredConfig(
             WfsSourceConfiguration configuration) {
         WfsSourceConfiguration config = new WfsSourceConfiguration(configuration);
         String wfsVersionExp = "/wfs:WFS_Capabilities/attribute::version";
         HttpGet getCapabilitiesRequest = new HttpGet(
                 config.endpointUrl() + GET_CAPABILITIES_PARAMS + ACCEPT_VERSION_PARAMS);
-        XPath xpath = XPathFactory.newInstance().newXPath();
-        xpath.setNamespaceContext(OWS_NAMESPACE_CONTEXT);
+        XPath xpath = XPathFactory.newInstance()
+                .newXPath();
+        xpath.setNamespaceContext(SOURCES_NAMESPACE_CONTEXT);
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
-            Document capabilitiesXml = builder.parse(trustClient.execute(getCapabilitiesRequest)
+            Document capabilitiesXml = builder.parse(getCloseableHttpClient(true).execute(getCapabilitiesRequest)
                     .getEntity()
                     .getContent());
             String wfsVersion = xpath.compile(wfsVersionExp)
                     .evaluate(capabilitiesXml);
             switch (wfsVersion) {
             case "2.0.0":
-                return Optional.of((WfsSourceConfiguration) config.factoryPid(
-                        WFS2_FACTORY_PID));
+                return Optional.of((WfsSourceConfiguration) config.factoryPid(WFS2_FACTORY_PID));
             case "1.0.0":
-                return Optional.of((WfsSourceConfiguration) config.factoryPid(
-                        WFS1_FACTORY_PID));
+                return Optional.of((WfsSourceConfiguration) config.factoryPid(WFS1_FACTORY_PID));
             default:
                 return Optional.empty();
             }
@@ -156,11 +149,15 @@ public class WfsSourceUtils {
         }
     }
 
-    public static void setNoTrustClient(HttpClient client) {
-        noTrustClient = client;
-    }
-
-    public static void setTrustClient(HttpClient client) {
-        trustClient = client;
+    CloseableHttpClient getCloseableHttpClient(boolean trustAnyCA)
+            throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException {
+        HttpClientBuilder builder = HttpClientBuilder.create().setDefaultRequestConfig(
+                RequestConfig.custom().setConnectTimeout(PING_TIMEOUT).build());
+        if (trustAnyCA) {
+            builder.setSSLSocketFactory(new SSLConnectionSocketFactory(SSLContexts.custom()
+                    .loadTrustMaterial(null, (chain, authType) -> true)
+                    .build()));
+        }
+        return builder.build();
     }
 }

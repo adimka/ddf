@@ -59,6 +59,7 @@ public class WfsConfigFromUrlProbeMethod extends ProbeMethod<WfsSourceConfigurat
 
     public static final List<String> RETURN_TYPES = ImmutableList.of(DISCOVERED_SOURCES);
 
+    private WfsSourceUtils utils;
 
     public WfsConfigFromUrlProbeMethod() {
         super(WFS_CONFIG_FROM_URL_ID,
@@ -69,15 +70,16 @@ public class WfsConfigFromUrlProbeMethod extends ProbeMethod<WfsSourceConfigurat
                 FAILURE_TYPES,
                 WARNING_TYPES,
                 RETURN_TYPES);
+        utils = new WfsSourceUtils();
     }
 
     @Override
     public ProbeReport probe(WfsSourceConfiguration configuration) {
-        UrlAvailability status = WfsSourceUtils.getUrlAvailability(configuration.endpointUrl());
+        UrlAvailability status = utils.getUrlAvailability(configuration.endpointUrl());
         String result;
         Map<String, Object> probeResult = new HashMap<>();
         if (status.isAvailable()) {
-            Optional<WfsSourceConfiguration> preferred = WfsSourceUtils.getPreferredConfig(configuration);
+            Optional<WfsSourceConfiguration> preferred = utils.getPreferredConfig(configuration);
             if (preferred.isPresent()) {
                 result = status.isTrustedCertAuthority() ? CONFIG_CREATED : UNTRUSTED_CA;
                 probeResult.put(DISCOVERED_SOURCES, preferred.get().configurationHandlerId(WFS_SOURCE_CONFIGURATION_HANDLER_ID));

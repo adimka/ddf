@@ -15,22 +15,21 @@ package org.codice.ddf.admin.sources.csw
 
 import org.apache.http.Header
 import org.apache.http.HttpEntity
-import org.apache.http.HttpResponse
 import org.apache.http.StatusLine
-import org.apache.http.client.HttpClient
+import org.apache.http.client.methods.CloseableHttpResponse
+import org.apache.http.impl.client.CloseableHttpClient
 import org.codice.ddf.admin.api.config.sources.CswSourceConfiguration
 import spock.lang.Specification
 
 import javax.net.ssl.SSLPeerUnverifiedException
 
-import static org.codice.ddf.admin.api.services.CswServiceProperties.CSW_GMD_FACTORY_PID
-import static org.codice.ddf.admin.api.services.CswServiceProperties.CSW_PROFILE_FACTORY_PID
-import static org.codice.ddf.admin.api.services.CswServiceProperties.CSW_SPEC_FACTORY_PID
+import static org.codice.ddf.admin.api.services.CswServiceProperties.*
 
 class CswSourceUtilsTest extends Specification {
 
-    def client = Mock(HttpClient)
-    def response = Mock(HttpResponse)
+    def utils
+    def client = Mock(CloseableHttpClient);
+    def response = Mock(CloseableHttpResponse)
     def statusLine = Mock(StatusLine)
     def entity = Mock(HttpEntity)
     def cType = Mock(Header)
@@ -40,13 +39,15 @@ class CswSourceUtilsTest extends Specification {
     def gmdXml = this.getClass().getClassLoader().getResourceAsStream('gmdGetCapabilities.xml')
     def specXml = this.getClass().getClassLoader().getResourceAsStream('specGetCapabilities.xml')
 
+    def setup() {
+        utils = Spy(CswSourceUtils) { getCloseableHttpClient(_) >> client }
+    }
+
     // Tests for getUrlAvailability
     def 'test happy path trusted CA'() {
         setup:
-        CswSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> response
@@ -62,11 +63,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test bad return code noTrustClient' () {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> response
@@ -81,11 +79,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test bad mime type noTrustClient' () {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> response
@@ -100,11 +95,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test cert error with noTrustClient'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> {throw new SSLPeerUnverifiedException("test")}
@@ -115,12 +107,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test good path trustClient'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")} >> response
@@ -136,12 +124,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test bad return code trustClient'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")} >> response
@@ -156,12 +140,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test bad mime type trustClient'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")} >> response
@@ -176,12 +156,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test failure to connect'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = CswSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")}
@@ -193,26 +169,20 @@ class CswSourceUtilsTest extends Specification {
     // Tests for getPreferredConfig
 
     def 'test empty response'() {
-        setup:
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def config = CswSourceUtils.getPreferredConfig(configuration)
+        def config = utils.getPreferredConfig(configuration)
 
         then:
         1 * client.execute(_) >> response
         1 * response.getEntity() >> entity
         1 * entity.getContent() >> ""
 
-        assert config == Optional.empty()
+        config == Optional.empty()
     }
 
     def 'test parse metacard:uri config'() {
-        setup:
-        CswSourceUtils.setTrustClient(client)
-
-        when:
-        def config = CswSourceUtils.getPreferredConfig(configuration)
+       when:
+        def config = utils.getPreferredConfig(configuration)
 
         then:
         1 * client.execute(_) >> response
@@ -224,11 +194,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test parse GMD config'() {
-        setup:
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def config = CswSourceUtils.getPreferredConfig(configuration)
+        def config = utils.getPreferredConfig(configuration)
 
         then:
         1 * client.execute(_) >> response
@@ -240,11 +207,8 @@ class CswSourceUtilsTest extends Specification {
     }
 
     def 'test no metacard or GMD parse config'() {
-        setup:
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def config = CswSourceUtils.getPreferredConfig(configuration)
+        def config = utils.getPreferredConfig(configuration)
 
         then:
         1 * client.execute(_) >> response
@@ -257,26 +221,19 @@ class CswSourceUtilsTest extends Specification {
 
     // Tests for discover URL
     def 'test no URL selected with bad hostname/port'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-        CswSourceUtils.setTrustClient(client)
-
         when:
-        def endpointUrl = CswSourceUtils.confirmEndpointUrl(configuration)
+        def endpointUrl = utils.confirmEndpointUrl(configuration)
 
         then:
         _ * configuration.sourceHostName() >> "test"
         _ * configuration.sourcePort() >> 443
         _ * client.execute(_) >> {throw new IOException()}
-        endpointUrl == Optional.empty()
+        endpointUrl == null
     }
 
     def 'test URL created with no cert error'() {
-        setup:
-        CswSourceUtils.setNoTrustClient(client)
-
         when:
-        def endpointUrl = CswSourceUtils.confirmEndpointUrl(configuration)
+        def endpointUrl = utils.confirmEndpointUrl(configuration)
 
         then:
         _ * configuration.sourceHostName() >> "test"
@@ -288,7 +245,7 @@ class CswSourceUtilsTest extends Specification {
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "text/xml"
 
-        endpointUrl.isPresent()
-        endpointUrl.get().getUrl() == "https://test:443/services/csw"
+        endpointUrl != null
+        endpointUrl.getUrl() == "https://test:443/services/csw"
     }
 }

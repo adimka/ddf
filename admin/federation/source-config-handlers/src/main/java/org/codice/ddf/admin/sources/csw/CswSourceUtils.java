@@ -14,13 +14,15 @@
 package org.codice.ddf.admin.sources.csw;
 
 import static java.net.HttpURLConnection.HTTP_OK;
-import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.OWS_NAMESPACE_CONTEXT;
 import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.PING_TIMEOUT;
+import static org.codice.ddf.admin.api.handler.commons.SourceHandlerCommons.SOURCES_NAMESPACE_CONTEXT;
 import static org.codice.ddf.admin.api.services.CswServiceProperties.CSW_GMD_FACTORY_PID;
 import static org.codice.ddf.admin.api.services.CswServiceProperties.CSW_PROFILE_FACTORY_PID;
 import static org.codice.ddf.admin.api.services.CswServiceProperties.CSW_SPEC_FACTORY_PID;
 
-import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,10 +34,10 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
 
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.ssl.SSLContexts;
 import org.codice.ddf.admin.api.config.sources.CswSourceConfiguration;
@@ -57,30 +59,6 @@ public class CswSourceUtils {
     private static final List<String> CSW_MIME_TYPES = ImmutableList.of("text/xml",
             "application/xml");
 
-    private static HttpClient noTrustClient = HttpClientBuilder.create()
-            .setDefaultRequestConfig(RequestConfig.custom()
-                    .setConnectTimeout(PING_TIMEOUT)
-                    .build())
-            .build();
-
-    private static HttpClient trustClient;
-    static {
-        try {
-            trustClient = HttpClientBuilder.create()
-                    .setDefaultRequestConfig(RequestConfig.custom()
-                            .setConnectTimeout(PING_TIMEOUT)
-                            .build())
-                    .setSSLSocketFactory(new SSLConnectionSocketFactory(
-                            SSLContexts.custom()
-                                    .loadTrustMaterial(null, (chain, authType) -> true)
-                                    .build()
-                    ))
-                    .build();
-        } catch (Exception e) {
-            trustClient = HttpClientBuilder.create().build();
-        }
-    }
-
     private static final String GMD_OUTPUT_SCHEMA = "http://www.isotc211.org/2005/gmd";
 
     private static final String HAS_CATALOG_METACARD_EXP =
@@ -93,14 +71,14 @@ public class CswSourceUtils {
             "//ows:OperationsMetadata/ows:Operation[@name='GetRecords']/ows:Parameter[@name='OutputSchema' or @name='outputSchema']/ows:Value[1]/text()";
 
     // Given a config with an endpoint URL, determines if that URL is a functional CSW endpoint.
-    public static UrlAvailability getUrlAvailability(String url) {
+    public UrlAvailability getUrlAvailability(String url) {
         UrlAvailability result = new UrlAvailability(url);
         String contentType;
         int status;
         url += GET_CAPABILITIES_PARAMS;
         HttpGet request = new HttpGet(url);
         try {
-            HttpResponse response = noTrustClient.execute(request);
+            HttpResponse response = getCloseableHttpClient(false).execute(request);
             status = response.getStatusLine().getStatusCode();
             contentType = response.getEntity().getContentType().getValue();
             if (status == HTTP_OK && CSW_MIME_TYPES.contains(contentType)) {
@@ -112,10 +90,10 @@ public class CswSourceUtils {
             // This is the hostname != cert name case - if this occurs, the URL's SSL cert configuration
             // is incorrect, or a serious network security issue has occurred.
             return result.trustedCertAuthority(false).certError(true).available(false);
-        } catch (IOException e) {
+        } catch (Exception e) {
             try {
                 // We want to trust any root CA, but maintain all other standard SSL checks
-                HttpResponse response = trustClient.execute(request);
+                HttpResponse response = getCloseableHttpClient(true).execute(request);
                 status = response.getStatusLine().getStatusCode();
                 contentType = response.getEntity().getContentType().getValue();
                 if (status == HTTP_OK && CSW_MIME_TYPES.contains(contentType)) {
@@ -130,17 +108,17 @@ public class CswSourceUtils {
 
     // Given a configuration, determines the preferred CSW source type and output schema and returns
     // a config with the appropriate factoryPid and Output Schema.
-    public static Optional<CswSourceConfiguration> getPreferredConfig(CswSourceConfiguration config) {
+    public Optional<CswSourceConfiguration> getPreferredConfig(CswSourceConfiguration config) {
         CswSourceConfiguration preferred = new CswSourceConfiguration(config);
         HttpGet getCapabilitiesRequest = new HttpGet(
                 preferred.endpointUrl() + GET_CAPABILITIES_PARAMS);
         XPath xpath = XPathFactory.newInstance().newXPath();
-        xpath.setNamespaceContext(OWS_NAMESPACE_CONTEXT);
+        xpath.setNamespaceContext(SOURCES_NAMESPACE_CONTEXT);
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
-            Document capabilitiesXml = builder.parse(trustClient.execute(getCapabilitiesRequest)
+            Document capabilitiesXml = builder.parse(getCloseableHttpClient(true).execute(getCapabilitiesRequest)
                     .getEntity()
                     .getContent());
             if ((Boolean) xpath.compile(HAS_CATALOG_METACARD_EXP)
@@ -161,22 +139,27 @@ public class CswSourceUtils {
     }
 
     // Determines the correct CSW endpoint URL format given a config with a Hostname and Port
-    public static UrlAvailability confirmEndpointUrl(CswSourceConfiguration config) {
+    public UrlAvailability confirmEndpointUrl(CswSourceConfiguration config) {
         Optional<UrlAvailability> result =  URL_FORMATS.stream()
                 .map(formatUrl -> String.format(formatUrl,
                         config.sourceHostName(),
                         config.sourcePort()))
-                .map(CswSourceUtils::getUrlAvailability)
+                .map(this::getUrlAvailability)
                 .filter(avail -> avail.isAvailable() || avail.isCertError())
                 .findFirst();
         return result.isPresent() ? result.get() : null;
     }
 
-    public static void setNoTrustClient(HttpClient client) {
-        noTrustClient = client;
+    CloseableHttpClient getCloseableHttpClient(boolean trustAnyCA)
+            throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException {
+        HttpClientBuilder builder = HttpClientBuilder.create().setDefaultRequestConfig(
+                RequestConfig.custom().setConnectTimeout(PING_TIMEOUT).build());
+        if (trustAnyCA) {
+            builder.setSSLSocketFactory(new SSLConnectionSocketFactory(SSLContexts.custom()
+                    .loadTrustMaterial(null, (chain, authType) -> true)
+                    .build()));
+        }
+        return builder.build();
     }
 
-    public static void setTrustClient(HttpClient client) {
-        trustClient = client;
-    }
 }

@@ -15,9 +15,9 @@ package org.codice.ddf.admin.sources.opensearch
 
 import org.apache.http.Header
 import org.apache.http.HttpEntity
-import org.apache.http.HttpResponse
 import org.apache.http.StatusLine
-import org.apache.http.client.HttpClient
+import org.apache.http.client.methods.CloseableHttpResponse
+import org.apache.http.impl.client.CloseableHttpClient
 import org.codice.ddf.admin.api.config.sources.OpenSearchSourceConfiguration
 import spock.lang.Specification
 
@@ -25,26 +25,33 @@ import javax.net.ssl.SSLPeerUnverifiedException
 
 class OpenSearchSourceUtilsTest extends Specification {
 
-    def client = Mock(HttpClient)
-    def response = Mock(HttpResponse)
+    def utils
+    def client = Mock(CloseableHttpClient)
+    def response = Mock(CloseableHttpResponse)
     def statusLine = Mock(StatusLine)
     def entity = Mock(HttpEntity)
     def cType = Mock(Header)
     def configuration = Mock(OpenSearchSourceConfiguration)
 
+    def setup() {
+       utils = Spy(OpenSearchSourceUtils) {
+           getCloseableHttpClient(_) >> client
+       }
+    }
+
+    def goodOSQueryXml = this.getClass().getClassLoader().getResourceAsStream("goodOSQueryResponse.xml");
+
     // Tests for getUrlAvailability
     def 'test happy path trusted CA'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 200
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/atom+xml"
 
@@ -54,17 +61,15 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test bad return code noTrustClient' () {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 405
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/atom+xml"
         assert !urlAvail.isAvailable()
@@ -73,17 +78,15 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test bad mime type noTrustClient' () {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 200
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/json"
         assert !urlAvail.isAvailable()
@@ -92,11 +95,8 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test cert error with noTrustClient'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         1 * client.execute(_) >> {throw new SSLPeerUnverifiedException("test")}
@@ -107,18 +107,15 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test good path trustClient'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-        OpenSearchSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")} >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 200
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/atom+xml"
 
@@ -128,18 +125,15 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test bad return code trustClient'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-        OpenSearchSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")} >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 405
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/atom+xml"
         assert !urlAvail.isAvailable()
@@ -148,18 +142,15 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test bad mime type trustClient'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-        OpenSearchSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")} >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 200
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/json"
         assert !urlAvail.isAvailable()
@@ -168,12 +159,8 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
     def 'test failure to connect'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-        OpenSearchSourceUtils.setTrustClient(client)
-
         when:
-        def urlAvail = OpenSearchSourceUtils.getUrlAvailability("testUrl")
+        def urlAvail = utils.getUrlAvailability("testUrl")
 
         then:
         2 * client.execute(_) >> {throw new IOException("exception")}
@@ -183,28 +170,21 @@ class OpenSearchSourceUtilsTest extends Specification {
     }
 
 
-    // Tests for confimEndpointUrl
+    // Tests for confirmEndpointUrl
     def 'test no URL selected with bad hostname/port'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-        OpenSearchSourceUtils.setTrustClient(client)
-
         when:
-        def endpointUrl = OpenSearchSourceUtils.confirmEndpointUrl(configuration)
+        def endpointUrl = utils.confirmEndpointUrl(configuration)
 
         then:
         _ * configuration.sourceHostName() >> "test"
         _ * configuration.sourcePort() >> 443
         _ * client.execute(_) >> {throw new IOException()}
-        endpointUrl == Optional.empty()
+        endpointUrl == null
     }
 
     def 'test URL created with no cert error'() {
-        setup:
-        OpenSearchSourceUtils.setNoTrustClient(client)
-
         when:
-        def endpointUrl = OpenSearchSourceUtils.confirmEndpointUrl(configuration)
+        def endpointUrl = utils.confirmEndpointUrl(configuration)
 
         then:
         _ * configuration.sourceHostName() >> "test"
@@ -212,11 +192,12 @@ class OpenSearchSourceUtilsTest extends Specification {
         1 * client.execute(_) >> response
         1 * response.getStatusLine() >> statusLine
         1 * statusLine.getStatusCode() >> 200
-        1 * response.getEntity() >> entity
+        2 * response.getEntity() >> entity
+        1 * entity.getContent() >> goodOSQueryXml
         1 * entity.getContentType() >> cType
         1 * cType.getValue() >> "application/atom+xml"
 
-        endpointUrl.isPresent()
-        endpointUrl.get().getUrl() == "https://test:443/services/catalog/query"
+        endpointUrl != null
+        endpointUrl.getUrl() == "https://test:443/services/catalog/query"
     }
 }
