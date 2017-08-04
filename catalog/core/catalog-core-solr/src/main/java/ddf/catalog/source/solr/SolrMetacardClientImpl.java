@@ -13,11 +13,14 @@
  */
 package ddf.catalog.source.solr;
 
+import static ddf.catalog.operation.impl.FacetedQueryRequest.FACET_FIELDS_KEY;
+
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -110,13 +113,28 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
 
         SolrQuery query = getSolrQuery(request, filterDelegateFactory.newInstance(resolver));
 
+        boolean isFacetedQuery = false;
+        List<String> textFacetsProp = (List<String>) request.getPropertyValue(FACET_FIELDS_KEY);
+
+        if(textFacetsProp != null) {
+            isFacetedQuery = true;
+            textFacetsProp.stream()
+                    .map(facet -> !facet.endsWith("_txt") ? facet + "_txt" : facet)
+                    .forEach(query::addFacetField);
+        }
+
         long totalHits;
         List<Result> results = new ArrayList<>();
+        Map<String, Serializable> responseProps = new HashMap<>();
         try {
             QueryResponse solrResponse = client.query(query, SolrRequest.METHOD.POST);
             totalHits = solrResponse.getResults()
                     .getNumFound();
             SolrDocumentList docs = solrResponse.getResults();
+
+            if (isFacetedQuery) {
+                responseProps.put("facet-results", (Serializable) solrResponse.getFacetFields());
+            }
 
             for (SolrDocument doc : docs) {
                 if (LOGGER.isDebugEnabled()) {
@@ -133,13 +151,12 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
                 results.add(tmpResult);
             }
 
+
         } catch (SolrServerException | IOException | SolrException e) {
             throw new UnsupportedQueryException("Could not complete solr query.", e);
         }
 
-        SourceResponse sourceResponse = new SourceResponseImpl(request, results, totalHits);
-
-        return sourceResponse;
+        return new SourceResponseImpl(request, responseProps, results, totalHits);
     }
 
     @Override
