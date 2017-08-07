@@ -14,6 +14,7 @@
 package ddf.catalog.source.solr;
 
 import static ddf.catalog.operation.impl.FacetedQueryRequest.FACET_FIELDS_KEY;
+import static ddf.catalog.operation.impl.FacetedQueryRequest.FACET_RESULTS_KEY;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -25,6 +26,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.Transformer;
@@ -60,6 +62,7 @@ import ddf.catalog.data.impl.ResultImpl;
 import ddf.catalog.filter.FilterAdapter;
 import ddf.catalog.operation.QueryRequest;
 import ddf.catalog.operation.SourceResponse;
+import ddf.catalog.operation.impl.FacetedFieldResult;
 import ddf.catalog.operation.impl.QueryResponseImpl;
 import ddf.catalog.operation.impl.SourceResponseImpl;
 import ddf.catalog.source.UnsupportedQueryException;
@@ -133,7 +136,12 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
             SolrDocumentList docs = solrResponse.getResults();
 
             if (isFacetedQuery) {
-                responseProps.put("facet-results", (Serializable) solrResponse.getFacetFields());
+                List<FacetedFieldResult> facetedFieldResults = solrResponse
+                        .getFacetFields().stream()
+                        .map(this::convertFacetField)
+                        .collect(Collectors.toList());
+
+                responseProps.put(FACET_RESULTS_KEY, (Serializable) facetedFieldResults);
             }
 
             for (SolrDocument doc : docs) {
@@ -151,12 +159,26 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
                 results.add(tmpResult);
             }
 
-
         } catch (SolrServerException | IOException | SolrException e) {
             throw new UnsupportedQueryException("Could not complete solr query.", e);
         }
 
         return new SourceResponseImpl(request, responseProps, results, totalHits);
+    }
+
+    private FacetedFieldResult convertFacetField(FacetField facetField) {
+        List<String> values = new ArrayList<>();
+        List<Long> counts = new ArrayList<>();
+
+        facetField.getValues().forEach(
+                val -> {
+                    values.add(val.getName());
+                    counts.add(val.getCount());
+                }
+        );
+
+        return new FacetedFieldResult(facetField.getName(), values, counts);
+
     }
 
     @Override
