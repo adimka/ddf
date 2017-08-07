@@ -13,6 +13,8 @@
  */
 package ddf.catalog.operation.impl;
 
+import static ddf.catalog.Constants.FACET_FIELDS_KEY;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -23,12 +25,9 @@ import ddf.catalog.operation.Query;
 
 public class FacetedQueryRequest extends QueryRequestImpl {
 
-    public static final String FACET_FIELDS_KEY = "facet-fields";
-
-    public static final String FACET_RESULTS_KEY = "facet-results";
-
     /**
      * Instantiates a FacetedQueryRequest to facet on the provided fields.
+     *
      * @param query The query to be sent to the data source
      * @param facetFields A list of fields for which to return text faceting counts
      */
@@ -38,6 +37,7 @@ public class FacetedQueryRequest extends QueryRequestImpl {
 
     /**
      * Instantiates a FacetedQueryRequest to facet on the provided fields.
+     *
      * @param query The query to be sent to the data source
      * @param isEnterprise Specifies if this FacetedQueryRequest is an enterprise query
      * @param sourceIds A list of sources to query

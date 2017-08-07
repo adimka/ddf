@@ -13,8 +13,8 @@
  */
 package ddf.catalog.source.solr;
 
-import static ddf.catalog.operation.impl.FacetedQueryRequest.FACET_FIELDS_KEY;
-import static ddf.catalog.operation.impl.FacetedQueryRequest.FACET_RESULTS_KEY;
+import static ddf.catalog.Constants.FACET_FIELDS_KEY;
+import static ddf.catalog.Constants.FACET_RESULTS_KEY;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -62,7 +62,7 @@ import ddf.catalog.data.impl.ResultImpl;
 import ddf.catalog.filter.FilterAdapter;
 import ddf.catalog.operation.QueryRequest;
 import ddf.catalog.operation.SourceResponse;
-import ddf.catalog.operation.impl.FacetedFieldResult;
+import ddf.catalog.operation.faceting.FacetedFieldResult;
 import ddf.catalog.operation.impl.QueryResponseImpl;
 import ddf.catalog.operation.impl.SourceResponseImpl;
 import ddf.catalog.source.UnsupportedQueryException;
@@ -178,7 +178,6 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
         );
 
         return new FacetedFieldResult(facetField.getName(), values, counts);
-
     }
 
     @Override
