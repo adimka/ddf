@@ -62,6 +62,7 @@ import ddf.catalog.data.impl.ResultImpl;
 import ddf.catalog.filter.FilterAdapter;
 import ddf.catalog.operation.QueryRequest;
 import ddf.catalog.operation.SourceResponse;
+import ddf.catalog.operation.faceting.FacetProperties;
 import ddf.catalog.operation.faceting.FacetedFieldResult;
 import ddf.catalog.operation.impl.QueryResponseImpl;
 import ddf.catalog.operation.impl.SourceResponseImpl;
@@ -117,13 +118,18 @@ public class SolrMetacardClientImpl implements SolrMetacardClient {
         SolrQuery query = getSolrQuery(request, filterDelegateFactory.newInstance(resolver));
 
         boolean isFacetedQuery = false;
-        List<String> textFacetsProp = (List<String>) request.getPropertyValue(FACET_FIELDS_KEY);
+        FacetProperties textFacetsProp = (FacetProperties) request.getPropertyValue(FACET_FIELDS_KEY);
 
         if(textFacetsProp != null) {
             isFacetedQuery = true;
-            textFacetsProp.stream()
+
+            textFacetsProp.getFacetFields().stream()
                     .map(facet -> !facet.endsWith("_txt") ? facet + "_txt" : facet)
                     .forEach(query::addFacetField);
+
+            query.setFacetSort(textFacetsProp.getSortKey().name());
+            query.setFacetLimit(textFacetsProp.getFacetLimit());
+            query.setFacetMinCount(textFacetsProp.getMinFacetCount());
         }
 
         long totalHits;
