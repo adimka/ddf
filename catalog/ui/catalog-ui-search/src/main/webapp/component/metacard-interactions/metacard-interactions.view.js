@@ -16,6 +16,7 @@
 define([
     'wreqr',
     'marionette',
+    'backbone',
     'underscore',
     'jquery',
     './metacard-interactions.hbs',
@@ -30,11 +31,13 @@ define([
     'wkx',
     'js/CQLUtils',
     'component/confirmation/query/confirmation.query.view',
-    'component/loading/loading.view'
-], function (wreqr, Marionette, _, $, template, 
+    'component/loading/loading.view',
+    'component/lightbox/lightbox.view.instance',
+    'component/metacard-order/metacard-order.view'
+], function (wreqr, Marionette, Backbone, _, $, template, 
     CustomElements, store, router, user, sources, 
     MenuNavigationDecorator, Decorators, Query, wkx, 
-    CQLUtils, QueryConfirmationView, LoadingView) {
+    CQLUtils, QueryConfirmationView, LoadingView, lightboxInstance, MetacardOrderingView) {
 
     return Marionette.ItemView.extend(Decorators.decorate({
         template: template,
@@ -52,6 +55,7 @@ define([
             'click .interaction-share': 'handleShare',
             'click .interaction-download': 'handleDownload',
             'click .interaction-create-search': 'handleCreateSearch',
+            'click .interaction-order': 'handleOrder',
             'click .metacard-interaction': 'handleClick'
         },
         ui: {
@@ -273,7 +277,18 @@ define([
             this.$el.toggleClass('is-deleted', types.deleted !== undefined);
             this.$el.toggleClass('is-remote', types.remote !== undefined);
         },
-        serializeData: function(){
+        handleOrder: function(){
+            lightboxInstance.model.updateTitle('Order Delivery Information');
+            lightboxInstance.model.open();
+            var ids = this.model.map(function(result) {
+                return result.get('metacard').get('properties').get('id');
+            });
+            lightboxInstance.lightboxContent.show(new MetacardOrderingView({
+                model: new Backbone.Model({
+                    metacardId: ids
+                })
+            }));
+        }, serializeData: function(){
             var currentWorkspace = store.getCurrentWorkspace();
             var resultJSON, workspaceJSON;
             if (this.model){
