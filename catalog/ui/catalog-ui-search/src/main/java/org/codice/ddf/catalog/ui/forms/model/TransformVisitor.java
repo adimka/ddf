@@ -103,6 +103,14 @@ public class TransformVisitor<T> extends AbstractFilterVisitor2 {
   }
 
   @Override
+  public void visitPropertyIsLikeType(VisitableElement<List<VisitableElement<?>>> visitable) {
+    traceName(visitable);
+    builder.beginPropertyIsLikeType(visitable.getName(), null, false, null, null);
+    visitable.getValue().forEach(v -> v.accept(this));
+    builder.endTerminalType();
+  }
+
+  @Override
   public void visitBinaryTemporalType(VisitableElement<List<Object>> visitable) {
     traceName(visitable);
     builder.beginBinaryTemporalType(visitable.getName());

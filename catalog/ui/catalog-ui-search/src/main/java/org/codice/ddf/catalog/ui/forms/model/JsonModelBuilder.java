@@ -49,6 +49,7 @@ public class JsonModelBuilder implements FlatFilterBuilder<FilterNode> {
           .put("PropertyIsLessThanOrEqualTo", "<=")
           .put("PropertyIsGreaterThan", ">")
           .put("PropertyIsGreaterThanOrEqualTo", ">=")
+          .put("PropertyIsLike", "ILIKE")
           .build();
 
   private static final Map<String, String> BINARY_TEMPORAL_MAPPING =
@@ -139,6 +140,19 @@ public class JsonModelBuilder implements FlatFilterBuilder<FilterNode> {
     if (jsonOperator == null) {
       throw new IllegalArgumentException(
           "Cannot find mapping for binary comparison operator: " + operator);
+    }
+    nodeInProgress = new FilterNodeImpl(jsonOperator);
+    return this;
+  }
+
+  @Override
+  public FlatFilterBuilder beginPropertyIsLikeType(
+      String operator, String escapeChar, boolean matchCase, String singleChar, String wildCard) {
+    verifyResultNotYetRetrieved();
+    verifyTerminalNodeNotInProgress();
+    String jsonOperator = BINARY_COMPARE_MAPPING.get(operator);
+    if (jsonOperator == null) {
+      throw new IllegalArgumentException("Cannot find mapping for like operator: " + operator);
     }
     nodeInProgress = new FilterNodeImpl(jsonOperator);
     return this;

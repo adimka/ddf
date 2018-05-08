@@ -25,6 +25,9 @@ public interface FlatFilterBuilder<T> {
 
   FlatFilterBuilder beginBinaryComparisonType(String operator);
 
+  FlatFilterBuilder beginPropertyIsLikeType(
+      String operator, String escapeChar, boolean matchCase, String singleChar, String wildCard);
+
   FlatFilterBuilder beginBinaryTemporalType(String operator);
 
   FlatFilterBuilder beginBinarySpatialType(String operator);
